@@ -89,4 +89,28 @@ m8.3 <- quap(
 precis(m8.3, depth=2)
 
 compare(m8.1, m8.2, m8.3, func=PSIS)
+plot(PSIS(m8.3, pointwise=TRUE)$k)
+
+# plot Africa - cid=1
+d.A1 <- dd[dd$cid==1, ]
+plot(d.A1$rugged_std, d.A1$log_gdp_std, pch=16, col=rangi2, xlab="ruggedness (standardized)",
+     ylab="log GDP (as proportion of mean)", xlim=c(0, 1))
+mu <- link(m8.3, data=data.frame(cid=1, rugged_std=rugged_seq))
+mu.mean <- apply(mu, 2, mean)
+mu.ci <- apply(mu, 2, PI, prob=.97)
+lines(rugged_seq, mu.mean, lwd=2)
+shade(mu.ci, rugged_seq, col=col.alpha(rangi2, 0.3))
+mtext("African nations")
+
+
+# plot non Africa - cid=2
+d.A0 <- dd[dd$cid==2, ]
+plot(d.A0$rugged_std, d.A0$log_gdp_std, pch=1, col="black", xlab="ruggedness (standardized)",
+     ylab="log GDP (as proportion of mean)", xlim=c(0, 1))
+mu <- link(m8.3, data=data.frame(cid=2, rugged_std=rugged_seq))
+mu.mean <- apply(mu, 2, mean)
+mu.ci <- apply(mu, 2, PI, prob=.97)
+lines(rugged_seq, mu.mean, lwd=2)
+shade(mu.ci, rugged_seq)
+mtext("Non-African nations")
 
