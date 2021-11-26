@@ -1,0 +1,189 @@
+---
+title: "Problem Set 1"
+author: "Nicolas Kepper"
+date: "29 10 2021"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Exercise 1
+```{r echo=FALSE}
+p_grid <- seq(from=0, to=1, length.out=1000 )
+prior <- rep(1, 1000)
+likelihood <- dbinom(6, size=9, prob=p_grid )
+posterior <- likelihood * prior
+posterior <- posterior / sum(posterior)
+set.seed(215)
+samples <- sample(p_grid, prob=posterior, size=1e4, replace=TRUE)
+```
+
+### a)
+
+We just count, how many of the samples are below p = 0.2 and then devide that by the total count of samples
+```{r}
+sum(samples < 0.2) / 1e4
+```
+
+### b)
+This is pretty much the same exercise as a), just the condition has to be changed.
+```{r}
+sum(samples > 0.8) / 1e4
+```
+
+
+### c)
+One more time, only the condition when to count a sample has to be changed.
+```{r}
+sum(samples > 0.2 & samples < 0.8) / 1e4
+```
+
+### d)
+We can use the quantile function to find out, which value of p 20% of the posterior probability lie below. 
+```{r}
+quantile(samples, 0.2)
+```
+
+
+# Exercise 2
+
+### a)
+To construct this posterior distribution, we can almost reuse the code from exercise 1. Only the values for
+n and k in the binomial distribution have to be adapted to the new observed set. Now, in a list of 15 observations
+we have 8 "Water" observations.
+```{r flat_prior}
+p_grid <- seq(from=0, to=1, length.out=1000)
+prior <- rep(1, 1000)
+likelihood <- dbinom(8, size=15, prob=p_grid)
+posterior <- likelihood * prior
+posterior_flat_prior <- posterior / sum(posterior)
+```
+```{r, echo=FALSE}
+plot(p_grid, posterior_flat_prior, xlab="probability of water", ylab="posterior probability")
+mtext("Posterior for flat prior distribution")
+```
+
+### b)
+Instead of using a flat prior like before, we now use a prior looking like this:
+```{r, echo=FALSE}
+p_grid <- seq(from=0, to=1, length.out=1000)
+prior <- c(rep(0, 500), rep(1, 500))
+plot(p_grid, prior)
+```
+
+Using this step prior yields a slightly different posterior
+```{r step_prior}
+p_grid <- seq(from=0, to=1, length.out=1000)
+prior <- c(rep(0, 500), rep(1, 500))
+likelihood <- dbinom(8, size=15, prob=p_grid)
+posterior <- likelihood * prior
+posterior_step_prior <- posterior / sum(posterior)
+```
+
+
+To compare them, let's put both lines in the same plot.
+
+```{r, echo=FALSE}
+plot(p_grid, posterior_step_prior, xlab="probability of water", ylab="posterior probability", col="blue")
+lines(p_grid, posterior_flat_prior, col="green")
+abline(v=8/15, col="grey")
+```
+
+The most obvious difference between the two models is, that in the second model (step prior) all values of p below 0.5 keep the posterior probability 0 and the rest looks like a scaled up version of the first model. 
+This is very easy to explain. Every value in the second half of the posterior vector is the same for both models before standardizing.
+Since the sum of values in the vector is obviously lower than the sum of values in the posterior vector of the first model, it will have a similar shape as the first model but scaled higher after standardizing by deviding through the sum. To show that they have a smiliar shape, I added a grey line at p = 8/15 to make it visually clear, that both lines have their local maximum at the same value of p.
+
+```{r, echo=FALSE}
+sample.flat <- sample(p_grid, prob=posterior_flat_prior, size=1e4, replace=TRUE)
+sample.step <- sample(p_grid, prob=posterior_step_prior, size=1e4, replace=TRUE)
+```
+
+In continuous probability distributions the probability for any event itself is very close to zero. So instead of comparing the probability for p = 0.7 of both distributions, let's look at the probabilities for p to be in an interval [0.7 - eps, 0.7 + eps] around 0.7.
+```{r}
+probability_in_interval_eps <- function(eps) {
+  probability_07_flat <- sum(abs(sample.flat - 0.7) < eps) / length(sample.flat)
+  probability_07_step <- sum(abs(sample.step - 0.7) < eps) / length(sample.step)
+  return(c(probability_07_flat, probability_07_step))
+}
+probability_in_interval_eps(0.02)
+probability_in_interval_eps(0.01)
+probability_in_interval_eps(0.005)
+probability_in_interval_eps(0.0025)
+```
+As we can see, the probability for p to be the true value of 0.7 is by far lower in the first model than in the second model. 
+
+The second model is much better than the first one. Obviously, the more values for p are ruled out by the prior from the beginning, the higher the chance for the actual value of p will be. This also means, it definitely makes sense to match the prior as best as possible to known information. For example, another step to further improve this would be assuming (from looking at a globe) that at least 10% of the surface of the earth must be land. Then we could define the prior distribution as:
+```{r}
+prior <- c(rep(0, 500), rep(1, 400), rep(0, 100))
+```
+```{r echo=FALSE}
+plot(p_grid, prior)
+```
+
+Then, performing the exact same calculations as before and using an interval of ±1% around p=0.7 we can see, that the probability for p=0.7±1% gets even higher.
+```{r echo=FALSE}
+p_grid <- seq(from=0, to=1, length.out=1000)
+likelihood <- dbinom(8, size=15, prob=p_grid)
+posterior <- likelihood * prior
+posterior_double_step_prior <- posterior / sum(posterior)
+sample.double_step <- sample(p_grid, prob=posterior_double_step_prior, size=1e4, replace=TRUE)
+
+eps <- 0.01
+probability_07_flat <- sum(abs(sample.flat - 0.7) < eps) / length(sample.flat)
+probability_07_step <- sum(abs(sample.step - 0.7) < eps) / length(sample.step)
+probability_07_double_step <- sum(abs(sample.double_step - 0.7) < eps) / length(sample.double_step)
+print(c(probability_07_flat, probability_07_step, probability_07_double_step))
+```
+
+# Exercise 3
+
+There are different ways of approaching this problem. The first two that came to my mind are the following:  
+**1.** calculating the solution analytically  
+**2.** running a simulation  
+Both of these have their advantages and disadvantages. Calculating the solution is much more complex logically and figuring out a way of calculating the solution can take a human quite a while (especially if he's not a maths/statistics major). As soon as the calculations are figured out it is very easy to write the code for it, and running the code will be computationally inexpensive in most cases.  
+Simulating the problem would have the exact opposite advantages and disadvantages. Setting up the simulation won't be too complicated, you write the code for one step, and then you just let it repeat itself until the desired result is reached. On the other hand, running a simulation like this might take a long time and can very expensive computationally. In the following, I'll focus on a simulation.  
+I assume that we're using the completely flat prior distribution again for this exercise. 
+```{r simulation}
+simulations <- 100
+plot_simulations <- 4
+colors <- c("black", "red", "blue", "green")
+posterior <- rep(1, 1000)
+plot(p_grid, posterior, type="l", xlab="probability of water", ylab="posterior probability", ylim = c(0, 0.02))
+mtext("30 first posterior distributions of the first 4 simulation runs")
+legend("topleft", legend=1:plot_simulations, col=colors, lty=1:2, cex=0.8)
+throw_counts <- c()
+
+for(i in 1:simulations) {
+  probability_for_005_interval <- 0
+  p_grid <- seq(from=0, to=1, length.out=1000)
+  posterior <- rep(1, 1000)
+  w_throws <- 0
+  l_throws <- 0
+  
+  
+  while(probability_for_005_interval < 0.99) {
+    if(runif(1) <= 0.7) w_throws <- w_throws + 1 else l_throws <- l_throws + 1
+    prior <- posterior
+    likelihood <- dbinom(w_throws, size=w_throws + l_throws, prob=p_grid)
+    posterior <- likelihood * prior
+    posterior <- posterior / sum(posterior)
+    
+    if(w_throws + l_throws < 30 && i <= plot_simulations) 
+      lines(x=p_grid, y=posterior, type="l", col=colors[i], lwd=0.5)
+    
+    samples <- sample(p_grid, prob=posterior, size=1e4, replace=TRUE)
+    probability_for_005_interval <- sum(abs(samples - 0.7) < 0.025) / length(samples)
+  }
+  
+  throw_counts <- c(throw_counts, (w_throws + l_throws))
+}
+
+cat("Throw counts for all simulations:", throw_counts)
+```
+
+Over the `r simulations` simulations, the average throws needed to get the 99% percentile to be only 0.05 wide was `r mean(throw_counts)` with a standard deviation of `r sd(throw_counts)`. The maximum amount of throws needed was `r max(throw_counts)` and the minimum amount of throws `r min(throw_counts)`.

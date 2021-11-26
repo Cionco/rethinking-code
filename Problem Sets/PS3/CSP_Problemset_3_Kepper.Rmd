@@ -1,0 +1,307 @@
+---
+title: "CSP Problem Set 3"
+author: "Nicolas Kepper"
+date: "23 11 2021"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rethinking)
+library(dagitty)
+```
+
+# Exercise 1
+
+
+### a)
+Let's do some preparation first
+```{r}
+data(foxes)
+d <- foxes
+
+d$AREA <- standardize(d$area)
+d$AVGFOOD <- standardize(d$avgfood)
+d$GROUPSIZE <- standardize(d$groupsize)
+d$WEIGHT  <- standardize(d$weight)
+
+dag <- dagitty("dag{
+                  area -> avgfood; 
+                  avgfood -> groupsize -> weight;
+                  avgfood -> weight
+               }")
+coordinates(dag) <- list(x=c(area=1, avgfood=0, groupsize=2, weight=1)
+                        , y=c(area=0, avgfood=1, groupsize=1, weight=2))
+drawdag(dag)
+```
+
+Inspecting the DAG we can see that there are no backdoor paths from area to weight.
+Thus, we can use area as the single predictor for weight in our model.
+We can use the following function to show us what variables we have to condition on
+in order to close backdoor paths if doing it manually by looking at the dag seems
+to be too much work.
+
+```{r}
+adjustmentSets(dag, exposure="area", outcome="weight")
+```
+
+Well then, let's fit a model
+
+```{r}
+m_w_ar <- quap(
+  alist(
+    WEIGHT ~ dnorm(mu, sigma),
+    mu <- a + bAR * AREA,
+    a <- dnorm(0, 1),
+    bAR <- dnorm(0, 1),
+    sigma <- dexp(1)
+  ), data=d
+)
+```
+
+
+Let's have a look at potential regressions with these priors
+```{r}
+prior <- extract.prior(m_w_ar)
+area.seq <- seq(from=-2.5, to=2.5, length.out=30)
+
+mu <- link(m_w_ar, post=prior, data=list(AREA=area.seq))
+plot(NULL, xlim=range(area.seq), ylim=c(-2, 2), xlab="Standardized Area", 
+     ylab="Stadardized Weight")
+
+for(i in 1:30) lines(area.seq, mu[i, ], col=col.alpha("black", 0.4))
+```
+
+This looks a bit wild, so let's change the priors a little for them to better match
+reality  
+
+```{r}
+m_w_ar <- quap(
+  alist(
+    WEIGHT ~ dnorm(mu, sigma),
+    mu <- a + bAR * AREA,
+    a <- dnorm(0, 0.2),
+    bAR <- dnorm(0, 0.5),
+    sigma <- dexp(1)
+  ), data=d
+)
+```
+```{r echo=FALSE}
+prior <- extract.prior(m_w_ar)
+area.seq <- seq(from=-2.5, to=2.5, length.out=30)
+pred_dat <- list(AREA=area.seq)
+
+mu <- link(m_w_ar, post=prior, data=pred_dat)
+plot(NULL, xlim=range(area.seq), ylim=c(-2, 2), xlab="Standardized Area", ylab="Stadardized Weight")
+
+for(i in 1:30) lines(area.seq, mu[i, ], col=col.alpha("black", 0.4))
+```  
+
+
+Much better.  
+  
+However, looking at `precis(m_w_ar)` as well as a little regression graph, 
+we can see clearly that area size doesn't really have any casual influence on 
+weight of the foxes. The shades in the graph show the 89% interval of the mean 
+(inner shade) and the 89% interval of the predictions (outer shade).  
+```{r echo=FALSE}
+mu <- link(m_w_ar, data=pred_dat)
+mu.mean <- apply(mu, 2, mean)
+mu.PI <- apply(mu, 2, PI, prob=0.89)
+
+sim.weight <- sim(m_w_ar, data=pred_dat)
+weight.PI <- apply(sim.weight, 2, PI, prob=0.89)
+plot(WEIGHT ~ AREA, d, col=col.alpha(rangi2, 0.5))
+lines(area.seq, mu.mean)
+shade(mu.PI, area.seq)
+shade(weight.PI, area.seq)
+
+
+precis(m_w_ar)
+```
+
+### b)
+Once again, we need to check for backdoor paths first.  
+```{r}
+adjustmentSets(dag, exposure="avgfood", outcome="weight")
+```
+
+
+And once again we can see that there are no backdoor paths, so we again use a 
+single predictor model. Including groupsize into the model would block the indirect
+path from avgfood to weight but then the result would not be the **total** casual
+influence. Then it would be the **direct** casual influence. "The effect of 
+adding food" however means that we have to take all paths from food to weight
+into consideration.
+```{r}
+m_w_af <- quap(
+  alist(
+    WEIGHT ~ dnorm(mu, sigma),
+    mu <- a + bAF * AVGFOOD,
+    a <- dnorm(0, 0.2),
+    bAF <- dnorm(0, 0.5),
+    sigma <- dexp(1)
+  ), data=d
+)
+```
+```{r echo=FALSE}
+pred_dat <- list(AVGFOOD=area.seq) #since everything is standardized we can just reuse the sequence from before
+
+mu <- link(m_w_af, data=pred_dat)
+mu.mean <- apply(mu, 2, mean)
+mu.PI <- apply(mu, 2, PI, prob=0.89)
+
+sim.weight <- sim(m_w_af, data=pred_dat)
+weight.PI <- apply(sim.weight, 2, PI, prob=0.89)
+plot(WEIGHT ~ AVGFOOD, d, col=col.alpha(rangi2, 0.5))
+lines(area.seq, mu.mean)
+shade(mu.PI, area.seq)
+shade(weight.PI, area.seq)
+
+
+precis(m_w_af)
+```
+
+As we can see, we see nothing. This makes quite a bit of sense though, since - on our DAG - 
+avgfood is directly influenced only by territory size, which evidently doesn't
+influence weight.
+
+### c)
+Checking for backdoor paths again... 
+```{r}
+adjustmentSets(dag, exposure="groupsize", outcome="weight")
+```
+
+... we can see that we actually have to close a backdoor this time. So, let's build
+a model with groupsize and avgfood as predictors.
+```{r}
+m_w_gs <- quap(
+  alist(
+    WEIGHT ~ dnorm(mu, sigma),
+    mu <- a + bAF * AVGFOOD + bGS * GROUPSIZE,
+    a <- dnorm(0, 0.2),
+    bAF <- dnorm(0, 0.5),
+    bGS <- dnorm(0, 0.5),
+    sigma <- dexp(1)
+  ), data=d
+)
+```
+
+\newpage
+Let' have a look at how each predictor influences the weight now.
+```{r echo=FALSE}
+precis(m_w_gs)
+```
+
+Using this model, it seems that group size negatively impacts weight, while food 
+positively impacts it. This makes sense. More foxes in a group with the same 
+amount of food means every fox gets a smaller share and thus weighs less - more
+average food means every fox gets more food, so they weigh more.
+However, we didn't see a casual effect of neither area, nor avgfood on weight earlier
+so this looks a lot like a masking effect. 
+What really happens when there's excess food is that foxes from other territories
+move here to get more food, increasing the group size but decreasing the avgfood.
+If there's too little food in one territory foxes will move to a different territory
+that has more food. 
+So we can increase/decrease parameters arbitrarily, in reality the foxes will find
+an equilibrium balance. And this explains why the total casual influence of food 
+is 0.
+
+
+# Exercise 2
+
+Model selection is a process in which you look at different models using techniques
+like cross-validation or widely applicable information criterion and then __select__
+the model with the best score. The other models are completely discarded. 
+In model comparison, on the other hand, we keep all models in order to compare 
+how different variables influence the outcome. This also helps with understanding
+casual influences of the variables.
+
+Under model selection we lose a lot of information about relative model accuracy.
+We lose the differences in CV/PSIS/WAIC values. And we also lose the possibility
+to choose a different model for a different goal, i.e. looking at the data from 
+a slightly different point of view, focussing more on casual influences, etc.
+
+
+
+# Exercise 3
+
+```{r}
+
+m_3_1 <- quap(
+  alist(
+    WEIGHT ~ dnorm(mu, sigma),
+    mu <- a + bAF * AVGFOOD + bGS * GROUPSIZE + bAR * AREA,
+    a <- dnorm(0, 0.2),
+    c(bAF, bGS, bAR) <- dnorm(0, 0.5),
+    sigma <- dexp(1)
+  ), data=d
+)
+
+m_3_2 <- quap(
+  alist(
+    WEIGHT ~ dnorm(mu, sigma),
+    mu <- a + bAF * AVGFOOD + bGS * GROUPSIZE,
+    a <- dnorm(0, 0.2),
+    c(bAF, bGS) <- dnorm(0, 0.5),
+    sigma <- dexp(1)
+  ), data=d
+)
+
+m_3_3 <- quap(
+  alist(
+    WEIGHT ~ dnorm(mu, sigma),
+    mu <- a + bAF * AVGFOOD + bAR * AREA,
+    a <- dnorm(0, 0.2),
+    c(bAF, bAR) <- dnorm(0, 0.5),
+    sigma <- dexp(1)
+  ), data=d
+)
+
+m_3_4 <- quap(
+  alist(
+    WEIGHT ~ dnorm(mu, sigma),
+    mu <- a + bAF * AVGFOOD,
+    a <- dnorm(0, 0.2),
+    bAF <- dnorm(0, 0.5),
+    sigma <- dexp(1)
+  ), data=d
+)
+
+m_3_5 <- quap(
+  alist(
+    WEIGHT ~ dnorm(mu, sigma),
+    mu <- a + bAR * AREA,
+    a <- dnorm(0, 0.2),
+    bAR <- dnorm(0, 0.5),
+    sigma <- dexp(1)
+  ), data=d
+)
+
+compare(m_3_1, m_3_2, m_3_3, m_3_4, m_3_5, func=WAIC)
+```
+```{r echo=FALSE}
+plot(compare(m_3_1, m_3_2, m_3_3, m_3_4, m_3_5, func=WAIC))
+```
+
+We can kind of observe two groups looking at out-of-sample deviance.
+`m_3_1` and `m_3_2` seem almost identical while the other three build their own 
+small group of similarness.
+
+Let's talk about (4) and (5) first. They only use one predictor variable each - 
+one uses area the other avgfood. Looking at the DAG we can recall, that they're
+nearly identical in isolation since all information of area has to pass through 
+avgfood on its way to weight.  
+We can use the same reasoning to explain why (3) is in the same group. This model
+uses the two predictors area and avgfood which - as I just said - are basically
+the same thing.  
+Similarly, it doesn't matter whether we use all three predictors or just groupsize
+and avgfood, because they essentially say the same thing
+due to area being fully routed through avgfood.  
+However, adding groupsize to the model does make the difference of closing a 
+backdoor, or rather splitting up the total casual influence into two direct 
+influences, which is why the two models that do use groupsize as a predictor
+perform better than the other three models.

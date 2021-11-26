@@ -1,0 +1,193 @@
+---
+title: "CSP Problem Set 2"
+author: "Nicolas Kepper"
+date: "5 11 2021"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+require(rethinking)
+```
+
+# Exercise 1
+```{r echo=FALSE}
+data(Howell1)
+d <- Howell1
+d2 <- d[d$age >= 18, ]
+xbar <- mean(d2$weight)
+m4.3 <- quap(
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a + b*(weight - xbar),
+    a ~ dnorm(187, 20),
+    b ~ dlnorm(0, 1),
+    sigma ~ dunif(0, 50)
+  ), data=d2
+)
+```
+Using the model from the exercise we can extract 10000 samples and run our calculations on that sample.
+First step is defining the link function, which calculates the value of the model for an input weight.
+```{r}
+post <- extract.samples(m4.3)
+
+mu.link <- function(weight) post$a + post$b*(weight - xbar)
+```
+Next, this link function is used on each of the weights that we're searching heights for.
+```{r}
+weight.seq <- c(46, 61, 35, 52, 56)
+mu <- sapply(weight.seq, mu.link)
+```
+
+Applying link to a vector of five values results in a 5x10000 (size of the sample) matrix. To shrink this matrix back to a vector of expected heights, we use the mean function on each column.
+```{r}
+mu.mean <- apply(mu, 2, mean)
+```
+
+We can use the sim function to account for uncertainty in the posterior as well as in the gaussian distribution and then apply the PI function to reduce the result to the confidence interval that we're looking for. 
+```{r}
+sim.height <- sim(m4.3, data=list(weight=weight.seq))
+height.CI <- apply(sim.height, 2, PI, prob=0.89)
+```
+
+All of this yields the following filled in table:
+```{r echo=FALSE}
+result = data.frame(Individual=c(1, 2, 3, 4, 5), weight=weight.seq, expected_height=mu.mean, p89_interval_start=t(height.CI)[,1], p89_interval_end=t(height.CI)[,2])
+result
+```
+
+
+# Exercise 2
+```{r}
+d$weight_s <- (d$weight - mean(d$weight)) / sd(d$weight)
+d$weight_s2 <- d$weight_s^2
+
+m4.5 <- quap (
+  alist(
+    height ~ dnorm(mu, sigma),
+    mu <- a + b1*weight_s + b2*weight_s2,
+    a ~ dnorm(168, 27),
+    b1 ~ dlnorm(0, 1),
+    b2 ~ dnorm(-3, 6),
+    sigma ~ dunif(0, 50)
+  ), data=d
+)
+
+set.seed(10)
+
+weight.seq <- seq(from=-2.5, to=2.5, length.out=30)
+pred_dat <- list(weight_s=weight.seq, weight_s2=weight.seq^2)
+
+prior <- extract.prior(m4.5)
+```
+I set the mean of the distribution of b2 to a negative value especially to account for heavier people where an additional unit of weight changes less about their height. That can also be seen looking at the Polynomial regression from chapter 4 of the book.
+
+```{r echo=FALSE}
+mu <- link(m4.5, data=pred_dat)
+mu.mean <- apply(mu, 2, mean)
+mu.PI <- apply(mu, 2, PI, prob=0.89)
+sim.height <- sim(m4.5, data=pred_dat)
+height.PI <- apply(sim.height, 2, PI, prob=0.89)
+
+plot(height ~ weight_s, d, col=col.alpha(rangi2, 0.5))
+lines(weight.seq, mu.mean)
+shade(mu.PI, weight.seq)
+shade(height.PI, weight.seq)
+```
+
+
+The model from above yields these prior predictions which all stay well inside the range of realistic heights.
+```{r}
+mu <- link(m4.5, post=prior, data=pred_dat)
+plot(NULL, xlim=range(weight.seq), ylim=c(0, 300), xlab="Standardized Weight", ylab="Height")
+
+for(i in 1:30) {
+  lines(weight.seq, mu[i,], col=col.alpha("black", 0.4))
+}
+abline(h=0, lty=2)
+abline(h=272, lty=1, lwd=0.5)
+```
+
+# Exercise 3
+
+$P \sim \mathcal{N}(\mu_i, \sigma)$  
+
+I see two ways of interpreting the "after controlling for location".  
+
+The first one is a constant change in price depending on postal code region. e.g. a house in 603xx is always about 10.000$ cheaper than a house of the same size in 604xx. Then the model would look like this:
+
+$\mu_i = \alpha + \beta_{S}S_i + \beta_{R_{603}}R_{603_i} + \beta_{R_{604}}R_{604_i} + \beta_{R_{659}}R_{659_i}$  
+
+However, if different regions increase their house prices differently depending on size, i.d. different squaremeter prices in different regions, then the model looks like this:
+
+$\mu_i = \alpha + (\beta_{R_{603}}R_{603_i} + \beta_{R_{604}}R_{604_i} + \beta_{R_{659}}R_{659_i})S_i$  
+
+where   
+$S_i$ is the size of House i  
+$R_{x_i}$ is the flag that is set to 1 if House i is located in postal code region x  
+$\beta_{R_x}$ is the "slope" of region x, how much more/less expensive a house gets when it's in region x. In the second model this would be the squaremeter price  
+$\beta_S$ is the "slope" of the prize increase over the size of the house. (only in model 1)  
+
+
+# Exercise 4
+
+```{r}
+library(dagitty)
+dag <- dagitty("dag{M -> A -> D}")
+coordinates(dag) <- list(x=c(M=0, A=1, D=2), y=c(M=0, A=0, D=0))
+drawdag(dag)
+```
+
+Let's check the implied conditional independencies by using the function with the corresponding name:
+```{r}
+impliedConditionalIndependencies(dag)
+```
+
+```{r echo=FALSE}
+data(WaffleDivorce)
+d <- WaffleDivorce
+d$D <- standardize(d$Divorce)
+d$M <- standardize(d$Marriage)
+d$A <- standardize(d$MedianAgeMarriage)
+
+m5.1 <- quap(
+  alist(
+    D ~ dnorm(mu, sigma),
+    mu <- a + bA*A,
+    a ~ dnorm(0, 0.2),
+    bA ~ dnorm(0, 0.5),
+    sigma ~ dexp(1)
+  ), data=d
+)
+
+m5.2 <- quap(
+  alist(
+    D ~ dnorm(mu, sigma),
+    mu <- a + bM*M,
+    a ~ dnorm(0, 0.2),
+    bM ~ dnorm(0, 0.5),
+    sigma ~ dexp(1)
+  ), data=d
+)
+
+m5.3 <- quap(
+  alist(
+    D ~ dnorm(mu, sigma),
+    mu <- a + bM*M + bA*A,
+    a ~ dnorm(0, 0.2),
+    bM ~ dnorm(0, 0.5),
+    bA ~ dnorm(0, 0.5),
+    sigma ~ dexp(1)
+  ), data=d
+)
+```
+```{r}
+plot(coeftab(m5.1, m5.2, m5.3), par=c("bA", "bM"))
+```
+
+Comparing three models, one using median marriage age **and** marriage rate, and one each for only one of them as predictor variable we can clearly see how bM is only associated with divorce when the marriage age is not used as a predictor variable. Put in different words, we can say:
+_When we know the median marriage age there's only marginal or rather no additional information gained by also knowing the marriage rate_.
+So the data is consistent with the independence of our DAG.
