@@ -1,0 +1,66 @@
+---
+title: "Practice Chapter 8"
+author: "Nicolas Kepper"
+date: "26 11 2021"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rethinking)
+```
+
+## Easy
+
+#### 8E1.
+For each of the casual relationships below, name a hypothetical third variable
+that would lead to an interaction effect    
+  (1) Bread dough rises because of yeast.  
+  (2) Education leads to higher income  
+  (3) Gasoline makes a car go.  
+  
+**Answer.**  
+  (1) Temperature.  
+  (2) Age.   
+  (3) Engine Efficiency  
+  
+#### 8E2.  
+Which of the following explanations invokes an interaction?  
+  (1) Caramelizing onions requires cooking over low heat and making sure the 
+  onions do not dry out.  
+  (2) A car will go faster when it has more cylinders or when it has a better 
+  fuel injector.  
+  (3) Most people acquire their political beliefs from their parents, unless 
+  they get them instead from their friends.  
+  (4) Intelligent animal species tend to be either highly social or have 
+  manipulative appendages (hands, tentacles, etc.).  
+
+**Answer.**
+  (1) Triggers an interaction. If the heat is too high, looking for onions not to
+  dry doesn't help caramelizing either.  
+  (2) Interaction. Cylinders and injectors work together to make the car faster.  
+  (3) No Interaction between beliefs from parents and beliefs from friends, only
+  one of them goes through  
+  (4) Interaction between sociality and appendages. They combine to determine IQ  
+  
+#### 8E3.
+For each of the explanations in **8E2** write a linear model that expresses the
+stated relationship.
+
+(1)  
+$C_i \sim {N}(\mu_i, \sigma)$  
+$\mu_i = \alpha + \beta_H * H_i + \beta_D * D_i + \beta_{HD} * H_iD_i$  
+
+(2)  
+$S_i \sim {N}(\mu_i, \sigma)$  
+$\mu_i = \alpha + \beta_C * C_i + \beta_I * I_i + \beta_{CI} * C_iI_i$  
+
+(3)  
+$P_i \sim  {N}(\mu_i, \sigma)$  
+$\mu_i = \alpha + \beta_P * P_i + \beta_F * F_i$  
+
+(4)  
+$IQ_i \sim {N}(\mu, \sigma$  
+$\mu_i = \alpha + \beta_S * S_i + \beta_A * A_i + \beta_{SA} * S_iA_i$  
