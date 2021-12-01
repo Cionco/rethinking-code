@@ -37,7 +37,7 @@ Which of the following explanations invokes an interaction?
   (4) Intelligent animal species tend to be either highly social or have 
   manipulative appendages (hands, tentacles, etc.).  
 
-**Answer.**
+**Answer.**  
   (1) Triggers an interaction. If the heat is too high, looking for onions not to
   dry doesn't help caramelizing either.  
   (2) Interaction. Cylinders and injectors work together to make the car faster.  
@@ -62,5 +62,37 @@ $P_i \sim  {N}(\mu_i, \sigma)$
 $\mu_i = \alpha + \beta_P * P_i + \beta_F * F_i$  
 
 (4)  
-$IQ_i \sim {N}(\mu, \sigma$  
+$IQ_i \sim {N}(\mu, \sigma)$  
 $\mu_i = \alpha + \beta_S * S_i + \beta_A * A_i + \beta_{SA} * S_iA_i$  
+
+## Medium
+
+#### 8M1.
+Recall the tulips example from the chapter. Suppose another set of treatments 
+adjusted the temperature in the greenhouse over two levels: cold and hot. 
+The data in the chapter were collected in the cold temperature. You find none of 
+the plants grown under the hot temperature developed any blooms at all, 
+regardless of the water and the shade levels. Can you explain this result in 
+terms of interactions between water, shade, and temperature?
+
+**Answer**  
+$\mu_i = \alpha + \beta_T*T_i + \beta_W*W_i + \beta_S*S_i + \beta_{TW} * T_iW_i + \beta_{TS} * T_iS_i + \beta_{WS} * W_iS_i + \beta_{TWS} * T_iW_iS_i$
+
+#### 8M2.
+Can you invent a regression equation that would make the bloom size zero, whenever the temperature is hot?
+
+$T_i$ can only be 0 or 1 (cold/hot). In the equation above, if it's 0, then all
+of the terms with T in them are "deleted" and the rest stays the same as before,
+perfectly describing the relationship of blooms and water, light. 
+If T is 1, everything has to reduce to 0, so let's rewrite the equation from above.
+
+$\mu_{i|T=1} = \alpha + \beta_T + \beta_WW_i + \beta_SS_i + \beta_{TW}W_i + \beta_{TS}S_i + \beta_{WS}W_iS_i + \beta_{TWS}W_iS_i$
+
+Which can be reduced to  
+$\mu_{i|T=1} = (\alpha + \beta_T) + (\beta_W + \beta_{TW})W_i + (\beta_S + \beta_{TS})S_i + (\beta_{WS} + \beta_{TWS})W_iS_i$
+
+Now, in order to get $\mu_i = 0$ for any combination of W and S we just say:  
+$\alpha = -\beta_T$  
+$\beta_W = -\beta_TW$  
+$\beta_S = -\beta_TS$  
+$\beta_WS = -\beta_TWS$  
