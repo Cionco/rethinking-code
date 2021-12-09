@@ -163,3 +163,57 @@ for(s in 1:50) {
 
 s <- sim(m12.5, data=pdat)
 simplehist(s, xlab="response")
+
+
+library(rethinking)
+data(Trolley)
+d <- Trolley
+levels(d$edu)
+
+edu_levels  <- c(6, 1, 8, 4, 7, 2, 5, 3)
+d$edu_new <- edu_levels[d$edu]
+
+library(gtools)
+set.seed(1805)
+delta <- rdirichlet(10, alpha=rep(2, 7))
+str(delta)
+
+h <- 3
+plot(NULL, xlim=c(1, 7), ylim=c(0, .4), xlab="index", ylab="probability")
+for(i in 1:nrow(delta)) lines(1:7, delta[i, ], type="b", pch=ifelse(i==h, 16, 1), lws=ifelse(i==h, 4, 1.5),
+                              col=ifelse(i==h, "black", col.alpha("black", .7)))
+
+dat <- list(
+  R = d$response,
+  action = d$action,
+  intention = d$intention,
+  contact = d$contact,
+  E = as.integer(d$edu_new),
+  alpha = rep(2, 7)
+)
+
+m12.6 <- ulam(
+  alist(
+    R ~ ordered_logistic(phi, kappa),
+    phi <- bE * sum(delta_j[1:E]) + bA * action + bI * intention + bC * contact,
+    kappa ~ normal(0, 1.5),
+    c(bA, bI, bC, bE) ~ normal(0, 1),
+    vector[8]: delta_j <<- append_row(0, delta),
+    simplex[7]: delta ~ dirichlet(alpha)
+  ), data=dat, chains=4, cores=4
+)
+
+delta_labels <- c("Elem", "MidSch", "SHS", "HSG", "SCol", "bach", "Mast", "Grad")
+pairs(m12.6, pars="delta", labels=data_labels)
+
+dat$edu_norm <- normalize(d$edu_new)
+m12.7 <- ulam(
+  alist(
+    R ~ ordered_logistic(mu, cutpoints),
+    mu <- bE * edu_norm + bA * action + bI * intention + bC * contact,
+    c(bA, bI, bC, bE) ~ normal(0, 1),
+    cutpoints ~ normal(0, 1.5)
+  ), data=dat, chains=4, cores=4
+)
+
+precis(m12.7)
